@@ -3,140 +3,126 @@ import random
 import string
 from datetime import datetime
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from flask import Flask
 import os
+import asyncio
 
-CONFIG_PATH = "config.json"
-DATA_PATH = "data.json"
+CONFIG = {
+    "BOT_TOKEN": os.getenv("BOT_TOKEN", "YAHAN_BOT_TOKEN_DALE"),
+    "ADMIN_ID": int(os.getenv("ADMIN_ID", "123456789"))
+}
 
-# Load config
-with open(CONFIG_PATH, "r") as f:
-    config = json.load(f)
+DATA_FILE = "data.json"
 
-BOT_TOKEN = config["BOT_TOKEN"]
-ADMIN_ID = config["ADMIN_ID"]
+# Flask for Render ping
+app = Flask(__name__)
 
-# Data loading/saving
+@app.route('/')
+def index():
+    return "Bot running!"
+
+# Load / Save Data
 def load_data():
-    with open(DATA_PATH, "r") as f:
+    with open(DATA_FILE, "r") as f:
         return json.load(f)
 
 def save_data(data):
-    with open(DATA_PATH, "w") as f:
+    with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# Generate random key
 def generate_key():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
 
 # Commands
-def start(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    update.message.reply_text("Apka Telegram ID: {}".format(user_id))
-    update.message.reply_text("Apne admin se key le kar /register <key> type karke register karein.")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"Apka Telegram ID: {update.effective_user.id}\nAdmin se key lekar /register <key> use karein.")
 
-def register(update: Update, context: CallbackContext):
+async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 1:
-        update.message.reply_text("Use: /register <key>")
+        await update.message.reply_text("Use: /register <key>")
         return
     key = context.args[0]
     data = load_data()
-    if key in data["keys"]:
-        data["users"][str(update.effective_user.id)] = key
+    if key in data['keys']:
+        data['users'][str(update.effective_user.id)] = key
         save_data(data)
-        update.message.reply_text("✅ Registration successful!")
+        await update.message.reply_text("✅ Registration successful!")
     else:
-        update.message.reply_text("❌ Invalid key.")
+        await update.message.reply_text("❌ Invalid key.")
 
-def genkey(update: Update, context: CallbackContext):
-    if update.effective_user.id != ADMIN_ID:
-        update.message.reply_text("❌ You are not allowed to generate keys.")
+async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != CONFIG['ADMIN_ID']:
+        await update.message.reply_text("❌ Only admin can generate keys.")
         return
-    new_key = generate_key()
+    key = generate_key()
     data = load_data()
-    data["keys"].append(new_key)
+    data['keys'].append(key)
     save_data(data)
-    update.message.reply_text(f"✅ Key generated: {new_key}")
+    await update.message.reply_text(f"✅ Key generated: {key}")
 
-def add(update: Update, context: CallbackContext):
+async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 1:
-        update.message.reply_text("Use: /add <amount>")
+        await update.message.reply_text("Use: /add <amount>")
         return
-    amount = float(context.args[0])
     user_id = str(update.effective_user.id)
     data = load_data()
-
-    # Authentication
-    if user_id not in data["users"]:
-        update.message.reply_text("❌ You are not registered. Use /register <key>")
+    if user_id not in data['users']:
+        await update.message.reply_text("❌ Register first.")
         return
-
-    data["transactions"].append({
+    amount = float(context.args[0])
+    data['transactions'].append({
         "user_id": user_id,
         "type": "add",
         "amount": amount,
         "date": datetime.now().strftime("%Y-%m-%d")
     })
     save_data(data)
-    update.message.reply_text(f"💰 {amount} saving se nikala gaya.")
+    await update.message.reply_text(f"💰 {amount} saving se nikala.")
 
-def west(update: Update, context: CallbackContext):
+async def west(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 1:
-        update.message.reply_text("Use: /west <amount>")
+        await update.message.reply_text("Use: /west <amount>")
         return
-    amount = float(context.args[0])
     user_id = str(update.effective_user.id)
     data = load_data()
-
-    if user_id not in data["users"]:
-        update.message.reply_text("❌ You are not registered. Use /register <key>")
+    if user_id not in data['users']:
+        await update.message.reply_text("❌ Register first.")
         return
-
-    data["transactions"].append({
+    amount = float(context.args[0])
+    data['transactions'].append({
         "user_id": user_id,
         "type": "west",
         "amount": amount,
         "date": datetime.now().strftime("%Y-%m-%d")
     })
     save_data(data)
-    update.message.reply_text(f"💸 {amount} kharch hua.")
+    await update.message.reply_text(f"💸 {amount} kharch hua.")
 
-def spend(update: Update, context: CallbackContext):
+async def spend(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     data = load_data()
-    if user_id not in data["users"]:
-        update.message.reply_text("❌ You are not registered.")
+    if user_id not in data['users']:
+        await update.message.reply_text("❌ Register first.")
         return
-
     month = datetime.now().strftime("%Y-%m")
-    total_spend = sum(t["amount"] for t in data["transactions"]
-                      if t["user_id"] == user_id and
-                         t["type"] == "west" and
-                         t["date"].startswith(month))
-    update.message.reply_text(f"📊 Is mahine ka total spend: {total_spend}")
+    total = sum(t['amount'] for t in data['transactions']
+                if t['user_id'] == user_id and t['type'] == "west" and t['date'].startswith(month))
+    await update.message.reply_text(f"📊 Is mahine ka total spend: {total}")
 
-# Flask Server (for Render ping)
-from flask import Flask
-app = Flask(__name__)
+async def main():
+    application = ApplicationBuilder().token(CONFIG["BOT_TOKEN"]).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("register", register))
+    application.add_handler(CommandHandler("genkey", genkey))
+    application.add_handler(CommandHandler("add", add))
+    application.add_handler(CommandHandler("west", west))
+    application.add_handler(CommandHandler("spend", spend))
 
-@app.route('/')
-def index():
-    return "Bot is running!"
+    # Telegram Polling ko async me chalana
+    loop = asyncio.get_event_loop()
+    loop.create_task(application.run_polling())
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
 if __name__ == "__main__":
-    updater = Updater(BOT_TOKEN, use_context=True)
-    dp = updater.dispatcher
-
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("register", register))
-    dp.add_handler(CommandHandler("genkey", genkey))
-    dp.add_handler(CommandHandler("add", add))
-    dp.add_handler(CommandHandler("west", west))
-    dp.add_handler(CommandHandler("spend", spend))
-
-    # Start polling in background
-    updater.start_polling()
-
-    # Start Flask app
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    asyncio.run(main())
