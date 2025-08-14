@@ -9,8 +9,8 @@ import os
 import asyncio
 
 CONFIG = {
-    "BOT_TOKEN": os.getenv("BOT_TOKEN", "YAHAN_BOT_TOKEN_DALE"),
-    "ADMIN_ID": int(os.getenv("ADMIN_ID", "123456789"))
+    "BOT_TOKEN": os.getenv("BOT_TOKEN", "8209067688:AAG89WS4BzGhVznDeO5ClWtGEQsyiEbTVCs"),
+    "ADMIN_ID": int(os.getenv("ADMIN_ID", "6788809365"))
 }
 
 DATA_FILE = "data.json"
